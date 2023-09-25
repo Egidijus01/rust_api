@@ -1,4 +1,4 @@
-use crate::model::{Post, Author};
+use crate::models::{authors::Author, posts::Post};
 
 use serde::{Serialize, Deserialize};
 
@@ -20,12 +20,17 @@ pub struct SingePostResponse {
     pub data: Post,
 }
 
+
+
+
+
 #[derive(Serialize,Debug)]
 pub struct AuthorResponse {
     pub status: String,
     pub results: usize,
     pub authors: Vec<Author>
 }
+
 
 #[derive(Serialize,Debug)]
 pub struct PostResponse {
@@ -48,6 +53,12 @@ pub struct CreatePostRequest {
 }
 
 #[derive(Deserialize, Debug)]
+pub struct UserRequest {
+    pub username: String,
+    pub password: String
+}
+
+#[derive(Deserialize, Debug)]
 pub struct UpdateAuthorRequest{
     pub name: String,
     pub surname: String,
@@ -63,7 +74,14 @@ pub struct UpdatePostRequest{
 
 }
 
+
 #[derive(Serialize)]
 pub struct StatusResponse {
     pub status: String,
+}
+
+
+#[derive(Serialize)]
+pub struct LoginResponse {
+    pub token: String,
 }

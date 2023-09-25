@@ -1,4 +1,5 @@
 -- Add migration script here
+-- Add migration script here
 CREATE TABLE IF NOT EXISTS authors(
     id          INTEGER PRIMARY KEY NOT NULL,
     name        VARCHAR(250)        NOT NULL,
@@ -16,5 +17,12 @@ CREATE TABLE IF NOT EXISTS posts(
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY (author_id)  REFERENCES authors(id)
 
-)
+);
 
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY NOT NULL,
+    username VARCHAR(250) NOT NULL,
+    password VARCHAR(250) NOT NULL
+
+
+)

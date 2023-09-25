@@ -1,17 +1,16 @@
-mod handler;
-mod model;
-mod response;
 
-
-use sqlx::SqlitePool;
+use sqlx::{migrate::MigrateDatabase, FromRow, Row, Sqlite, SqlitePool};
 
 use warp::{http::Method, Filter};
+mod Middleware;
+mod db;
+mod routes;
+mod models;
+mod handlers;
+use crate::db::database;
 
+const DB_URL: &str = "sqlite://sqlite.db";
 
-
-
-
-pub mod routes;
 
 
 
@@ -39,7 +38,15 @@ match migration_results {
 #[tokio::main]
 async fn main() {
     // Initialize your database connection pool
-
+    if !Sqlite::database_exists(DB_URL).await.unwrap_or(false) {
+        println!("Creating database {}", DB_URL);
+        match Sqlite::create_database(DB_URL).await {
+            Ok(_) => println!("Create db success"),
+            Err(error) => panic!("error: {}", error),
+        }
+    } else {
+        println!("Database already exists");
+    }
     let db_url = "sqlite://sqlite.db";
     let db = SqlitePool::connect(db_url)
         .await
@@ -72,7 +79,7 @@ async fn main() {
         .allow_credentials(true);
 
 
-    let routes = routes::routes(&db_clone).with(cors);
+    let routes = database::routes(&db_clone).with(cors);
     
     warp::serve(routes)
         .run(([127, 0, 0, 1], 8000)) 
