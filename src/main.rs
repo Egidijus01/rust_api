@@ -1,5 +1,5 @@
 
-use sqlx::{migrate::MigrateDatabase, FromRow, Row, Sqlite, SqlitePool};
+use sqlx::{migrate::MigrateDatabase, Sqlite, SqlitePool};
 
 use warp::{http::Method, Filter};
 mod Middleware;

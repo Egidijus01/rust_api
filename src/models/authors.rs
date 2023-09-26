@@ -18,4 +18,3 @@ pub struct UpdateAuthorSchema {
     pub name: String,
     pub surname: String,
 }
-

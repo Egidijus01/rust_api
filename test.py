@@ -28,7 +28,7 @@ try:
         print(jwt_token+'\n')
 
                   
-        authenticated_url = 'http://127.0.0.1:8000/api/authors'
+        authenticated_url = 'http://127.0.0.1:8000/api/authors?page=1&search=80'
                         #                  ^
                         #                  |
                         #                  |
@@ -44,13 +44,13 @@ try:
         headers['Authorization'] = f'Bearer {jwt_token}'
         data = {
             "name": "John",
-            "surname": "Doe"
+            "surname": "810"
         }
         
         data_json = json.dumps(data)
-        print(data)
+     
                                 #post, get, patch, delete
-        authenticated_response = requests.post(authenticated_url, headers=headers, data=data_json)
+        authenticated_response = requests.get(authenticated_url, headers=headers, data=data_json)
         print(authenticated_response.text)
 
         if authenticated_response.status_code == 200:

@@ -1,5 +1,5 @@
 use crate::models::posts::Post;
-use crate::models::response::{SingePostResponse, PostResponse, CreatePostRequest, UpdatePostRequest, StatusResponse};
+use crate::models::response::{SingePostResponse, PostResponse, CreatePostRequest, UpdatePostRequest, StatusResponse, PageQueryParam};
 use sqlx::SqlitePool;
 
 use warp::{ Rejection, Reply};
@@ -21,8 +21,12 @@ impl warp::reject::Reject for ErrorResponse {}
 
 
 //GET ALL POSTS
-pub async fn get_all_posts(db: &SqlitePool) -> Result<impl Reply, Rejection> {
-    let query: &str = "
+pub async fn get_all_posts(params: PageQueryParam, search_param: Option<String>, db: &SqlitePool) -> Result<impl Reply, Rejection> {
+    let page = params.page.unwrap_or(1);
+    let items_per_page = 10;
+    let offset = (page-1) * items_per_page;
+
+    let mut query = "
         SELECT
             id,
             title,
@@ -30,9 +34,20 @@ pub async fn get_all_posts(db: &SqlitePool) -> Result<impl Reply, Rejection> {
             author_id,
             created_at as created_at,
             updated_at as updated_at
-        FROM posts";
+        FROM posts
+        
+        ".to_owned();
 
-    match sqlx::query_as(query).fetch_all(db).await {
+    if let Some(search) = search_param{
+        query.push_str(&format!(" WHERE name LIKE '{}' OR surname LIKE '{}'", search, search));
+    }
+
+    query.push_str(" LIMIT (?) OFFSET (?)");
+
+    match sqlx::query_as(&query)
+    .bind(items_per_page)
+    .bind(offset)
+    .fetch_all(db).await {
         Ok(posts) => {
             let length = posts.len();
             let response = PostResponse {
@@ -98,7 +113,7 @@ pub async fn create_post(db: &SqlitePool, data:CreatePostRequest)-> Result<impl 
     ";
 
 
-    sqlx::query(query)
+    _ = sqlx::query(query)
         .bind(&data.title)
         .bind(&data.content)
         .bind(&data.author_id)
@@ -177,17 +192,17 @@ pub async fn update_post(db: &SqlitePool, data:UpdatePostRequest, post_id: i64)-
     
     let title = data.title.clone();
     let content = data.content.clone();
-    let updated_at_clone = updated_at.clone();
 
 
 
-    sqlx::query(query)
-    .bind(&title)
-    .bind(&content)
-    .bind(&updated_at)
-    .bind(post_id)
-    .execute(db)
-    .await;
+
+    _ = sqlx::query(query)
+        .bind(&title)
+        .bind(&content)
+        .bind(&updated_at)
+        .bind(post_id)
+        .execute(db)
+        .await;
 
 
     let post = Post {
@@ -223,7 +238,7 @@ pub async fn delete_post(db: &SqlitePool, id: i64)-> Result<impl Reply, Rejectio
         where id = ?
     ";
 
-    sqlx::query(query)
+    _ = sqlx::query(query)
     .bind(id)
     .execute(db)
     .await;

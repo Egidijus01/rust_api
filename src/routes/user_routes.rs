@@ -1,11 +1,7 @@
-use warp::filters::reply;
-use warp::{Filter, Rejection, Reply, reject};
-
+use warp::{Filter, Rejection, Reply};
 use sqlx::SqlitePool;
-
 use crate::handlers::user_handlers;
-
-use crate::models::response::{UserRequest};
+use crate::models::response::UserRequest;
 
 
 pub fn register_user_route(

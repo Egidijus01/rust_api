@@ -1,20 +1,22 @@
 use warp::{Filter, Rejection, Reply};
-
 use sqlx::SqlitePool;
 use crate::Middleware::auth::with_auth;
 use crate::handlers::posts_handler;
 
-use crate::models::response::{CreateAuthorRequest, CreatePostRequest, UpdatePostRequest, UpdateAuthorRequest};
+use crate::models::response::{ CreatePostRequest, UpdatePostRequest, PageQueryParam, SearchQueryParam};
 
 
 //ROUTE FOR ALL POSTS
 pub fn get_posts(db: SqlitePool) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone{
     warp::path!("api" / "posts")
         .and(warp::get())
-        .and_then(move || {
+        .and(warp::query::<PageQueryParam>())
+        .and(warp::query::<SearchQueryParam>())
+        .and_then(move |page_query_param:PageQueryParam, search_query:SearchQueryParam| {
             let db_clone = db.clone();
             async move {
-                posts_handler::get_all_posts(&db_clone).await 
+                let search_param = search_query.search;
+                posts_handler::get_all_posts(page_query_param, search_param, &db_clone).await 
             }
         })
 }
@@ -36,12 +38,6 @@ pub fn get_post_route(
             }
         })
 }
-
-
-
-
-
-
 
 
 //ROUTE TO CREATE A POST
@@ -85,7 +81,7 @@ pub fn update_post_route(
     pool: SqlitePool,
 ) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone {
     warp::patch()
-        .and(warp::path!("api" / "posts" / "update" / i64))
+        .and(warp::path!("api" / "posts" / i64))
         .and(with_auth())
         .and(warp::body::json())
         .and(warp::any().map(move || pool.clone()))
@@ -103,10 +99,9 @@ pub fn update_post_route(
 
 
 
-
 //DELETE POST ROUTE
 pub fn delete_post_route(db: SqlitePool) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::path!("api" / "posts" / "delete" / i64)
+    warp::path!("api" / "posts" / i64)
         .and(warp::delete())
         .and(with_auth())
         .and_then(move |id: i64, _: String| {

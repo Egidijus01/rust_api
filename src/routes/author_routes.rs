@@ -1,20 +1,23 @@
 use warp::{Filter, Rejection, Reply};
 
 use sqlx::SqlitePool;
-
 use crate::handlers::author_handler::*;
 use crate::Middleware::auth::with_auth;
-use crate::models::response::{CreateAuthorRequest, UpdateAuthorRequest};
+use crate::models::response::{CreateAuthorRequest, UpdateAuthorRequest, PageQueryParam, SearchQueryParam};
+
 
 
 //ROUTE FOR ALL AUTHORS
 pub fn get_authors(db: SqlitePool) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone{
     warp::path!("api" / "authors")
         .and(warp::get())
-        .and_then(move || {
+        .and(warp::query::<PageQueryParam>())
+        .and(warp::query::<SearchQueryParam>())
+        .and_then(move |page_query_param:PageQueryParam, search_query_params: SearchQueryParam| {
             let db_clone = db.clone();
             async move {
-                get_all_authors(&db_clone).await
+                let search_param = search_query_params.search;
+                get_all_authors(page_query_param, search_param,&db_clone).await
             }
         })
 }
@@ -61,7 +64,7 @@ pub fn update_author_route(
     pool: SqlitePool,
 ) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone {
     warp::patch()
-        .and(warp::path!("api" / "authors" / "update" / i64))
+        .and(warp::path!("api" / "authors" / i64))
         .and(with_auth())
         .and(warp::body::json())
         .and(warp::any().map(move || pool.clone()))
@@ -79,7 +82,7 @@ pub fn update_author_route(
 
 //DELTE AUTHOR ROUTE
 pub fn delete_author_route(db: SqlitePool) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    warp::path!("api" / "authors" / "delete" / i64)
+    warp::path!("api" / "authors" / i64)
         .and(warp::delete())
         .and(with_auth())
         .and_then(move |id: i64, _: String| {

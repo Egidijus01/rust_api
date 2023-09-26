@@ -10,6 +10,7 @@ use warp::{
     
 };
 use warp::reject::Reject;
+
 #[derive(Debug)]
 pub enum MyError {
     JWTTokenError,
@@ -25,14 +26,14 @@ struct Claims {
     exp: usize,
 }
 
-pub fn create_jwt(id: &i64) -> Result<String, MyError> {
+pub fn create_jwt(username: &String) -> Result<String, MyError> {
     let expiration = Utc::now()
         .checked_add_signed(chrono::Duration::minutes(5))  // 5 MINUTE LIFESPAN
         .expect("valid timestamp")
         .timestamp();
 
     let claims = Claims {
-        sub: id.to_string(),
+        sub: username.to_string(),
         exp: expiration as usize,
     };
     let header = Header::new(Algorithm::HS512);

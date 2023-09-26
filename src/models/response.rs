@@ -85,3 +85,13 @@ pub struct StatusResponse {
 pub struct LoginResponse {
     pub token: String,
 }
+
+#[derive(Deserialize)]
+pub struct PageQueryParam {
+    pub page: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SearchQueryParam{
+    pub search: Option<String>
+}

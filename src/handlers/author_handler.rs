@@ -1,6 +1,5 @@
-use crate::models::authors::Author;
-use crate::models::response::{SingeAuthorResponse, AuthorResponse, CreateAuthorRequest, UpdateAuthorRequest, StatusResponse};
-
+use crate::models::authors::{Author};
+use crate::models::response::{SingeAuthorResponse, AuthorResponse, CreateAuthorRequest, UpdateAuthorRequest, StatusResponse, PageQueryParam};
 use sqlx::SqlitePool;
 
 use warp::{ Rejection, Reply};
@@ -23,17 +22,39 @@ impl warp::reject::Reject for ErrorResponse {}
 
 
 //GET ALL AUTHORS
-pub async fn get_all_authors(db: &SqlitePool) -> Result<impl Reply, Rejection> {
-    let query: &str = "
+pub async fn get_all_authors(params: PageQueryParam, search_param: Option<String>, db: &SqlitePool) -> Result<impl Reply, Rejection> {
+    let page = params.page.unwrap_or(1);
+    let items_per_page = 10;
+    let offset = (page - 1) * items_per_page;
+
+    // Build the SQL query based on search criteria
+    let mut query = "
         SELECT
             id,
             name,
             surname,
             created_at,
             updated_at
-        FROM authors";
+        FROM authors
+    ".to_owned();
 
-    match sqlx::query_as(query).fetch_all(db).await {
+
+
+
+    //IF PARAM IS NOT EMPTY
+    if let Some(search) = search_param {
+
+
+        query.push_str(&format!(" WHERE name LIKE '{}' OR surname LIKE '{}'", search, search));
+    }
+
+    query.push_str(" LIMIT (?) OFFSET (?)");
+
+
+    match sqlx::query_as(&query)
+    .bind(items_per_page)
+    .bind(offset)
+    .fetch_all(db).await {
         Ok(authors) => {
             let length = authors.len();
             let response = AuthorResponse {
@@ -85,8 +106,7 @@ pub async fn get_author(db: &SqlitePool, id: i64) -> Result<impl Reply, Rejectio
 
 //CREATE AN AUTHOR
 pub async fn post_author(db: &SqlitePool, data:CreateAuthorRequest)-> Result<impl Reply, Rejection>{
-    let name = &data.name;
-    let surname = &data.surname;
+
 
     
     let query = "
@@ -95,7 +115,7 @@ pub async fn post_author(db: &SqlitePool, data:CreateAuthorRequest)-> Result<imp
     ";
 
 
-    let result = sqlx::query(query)
+    _ = sqlx::query(query)
         .bind(&data.name)
         .bind(&data.surname)
         .execute(db)
@@ -140,17 +160,17 @@ pub async fn update_author(db: &SqlitePool, data:UpdateAuthorRequest, author_id:
     
     let name = data.name.clone();
     let surname = data.surname.clone();
-    let updated_at_clone = updated_at.clone();
 
 
 
-    sqlx::query(query)
-    .bind(&name)
-    .bind(&surname)
-    .bind(&updated_at)
-    .bind(author_id)
-    .execute(db)
-    .await;
+
+    _ =sqlx::query(query)
+        .bind(&name)
+        .bind(&surname)
+        .bind(&updated_at)
+        .bind(author_id)
+        .execute(db)
+        .await;
 
 
     let author = Author {
@@ -184,7 +204,7 @@ pub async fn delete_author(db: &SqlitePool, id: i64)-> Result<impl Reply, Reject
         where id = ?
     ";
 
-    sqlx::query(query)
+    _ = sqlx::query(query)
     .bind(id)
     .execute(db)
     .await;
