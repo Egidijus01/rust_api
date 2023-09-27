@@ -43,6 +43,7 @@ pub struct PostResponse {
 pub struct CreateAuthorRequest {
     pub name: String,
     pub surname: String,
+    pub photo: Option<Vec<u8>>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -50,6 +51,7 @@ pub struct CreatePostRequest {
     pub title: String,
     pub content: String,
     pub author_id: i64,
+    pub uploaded_file: Option<Vec<u8>>
 }
 
 #[derive(Deserialize, Debug)]
@@ -62,6 +64,7 @@ pub struct UserRequest {
 pub struct UpdateAuthorRequest{
     pub name: String,
     pub surname: String,
+    pub photo: Option<Vec<u8>,>
 
 }
 #[derive(Deserialize, Debug)]
@@ -75,7 +78,7 @@ pub struct UpdatePostRequest{
 }
 
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct StatusResponse {
     pub status: String,
 }

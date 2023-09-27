@@ -1,16 +1,15 @@
 
 use sqlx::{migrate::MigrateDatabase, Sqlite, SqlitePool};
-
 use warp::{http::Method, Filter};
 mod Middleware;
 mod db;
 mod routes;
 mod models;
 mod handlers;
+use crate::Middleware::mime_check::check_content_type;
 use crate::db::database;
 
 const DB_URL: &str = "sqlite://sqlite.db";
-
 
 
 
@@ -31,6 +30,7 @@ match migration_results {
     println!("migration: {:?}", migration_results);
     
 }
+
 
 
 
@@ -59,16 +59,8 @@ async fn main() {
     // Apply migrations
     apply_migrations(&db).await;
 
-    
-    let db_clone = db.clone();
 
     
-
-
-    
-
- 
-
 
     // let routes = all_authors;
    
@@ -78,9 +70,16 @@ async fn main() {
         .allow_headers(vec!["content-type"])
         .allow_credentials(true);
 
+      
+        // let routes = log_content_type()
+        // .and(database::routes(&db).with(cors)).boxed();
+  
+        let routes = check_content_type()
+        .and(database::routes(&db).with(cors))
+        .boxed();
+   
 
-    let routes = database::routes(&db_clone).with(cors);
-    
+
     warp::serve(routes)
         .run(([127, 0, 0, 1], 8000)) 
         .await;

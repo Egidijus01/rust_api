@@ -10,6 +10,7 @@ pub struct Post {
     pub title: String,
     pub content: String,
     pub author_id: i64,
+    pub uploaded_file: Option<Vec<u8>>,
     pub created_at: String,
     pub updated_at: String,
 }

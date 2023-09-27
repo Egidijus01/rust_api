@@ -1,7 +1,8 @@
-use crate::models::authors::{Author};
+use crate::models::authors::Author;
 use crate::models::response::{SingeAuthorResponse, AuthorResponse, CreateAuthorRequest, UpdateAuthorRequest, StatusResponse, PageQueryParam};
 use sqlx::SqlitePool;
-
+use warp::reject::Reject;
+use crate::Middleware::mime_check::{check_image_format, check_image_size};
 use warp::{ Rejection, Reply};
 use serde:: Serialize;
 
@@ -20,6 +21,10 @@ impl ErrorResponse {
 impl warp::reject::Reject for ErrorResponse {}
 
 
+#[derive(Debug)]
+struct MyError(sqlx::Error);
+
+impl Reject for MyError {}
 
 //GET ALL AUTHORS
 pub async fn get_all_authors(params: PageQueryParam, search_param: Option<String>, db: &SqlitePool) -> Result<impl Reply, Rejection> {
@@ -33,6 +38,7 @@ pub async fn get_all_authors(params: PageQueryParam, search_param: Option<String
             id,
             name,
             surname,
+            photo,
             created_at,
             updated_at
         FROM authors
@@ -75,7 +81,7 @@ pub async fn get_all_authors(params: PageQueryParam, search_param: Option<String
 pub async fn get_author(db: &SqlitePool, id: i64) -> Result<impl Reply, Rejection>{
 
     let query = "
-        SELECT id, name, surname, created_at, updated_at
+        SELECT id, name, surname, photo, created_at, updated_at
         FROM authors 
         WHERE id = ?
     ";
@@ -105,30 +111,57 @@ pub async fn get_author(db: &SqlitePool, id: i64) -> Result<impl Reply, Rejectio
 
 
 //CREATE AN AUTHOR
-pub async fn post_author(db: &SqlitePool, data:CreateAuthorRequest)-> Result<impl Reply, Rejection>{
+pub async fn post_author(
+    db: &SqlitePool,
+    data: CreateAuthorRequest,
+) -> Result<impl Reply, Rejection> {
+    let photo = data.photo.clone();
 
 
+
+
+
+    if let Some(photo_data) = &photo {
+        if check_image_format(photo_data).is_none() {
+            return Ok(warp::reply::with_status(
+                warp::reply::json(&ErrorResponse::new("Bad Request".to_string())),
+                warp::http::StatusCode::BAD_REQUEST,
+            ));
+        }
     
+        if check_image_size(photo_data).is_none() {
+            return Ok(warp::reply::with_status(
+                warp::reply::json(&ErrorResponse::new("Bad Request".to_string())),
+                warp::http::StatusCode::BAD_REQUEST,
+            ));
+        }
+    }
+
+
     let query = "
-        INSERT INTO authors (name, surname)
-        VALUES (?, ?)
+        INSERT INTO authors (name, surname, photo)
+        VALUES (?, ?, ?)
     ";
 
-
-    _ = sqlx::query(query)
+    // Insert author data into the database
+    if let Err(err) = sqlx::query(query)
         .bind(&data.name)
         .bind(&data.surname)
+        .bind(&data.photo)
         .execute(db)
-        .await;
+        .await
+    {
+        return Err(warp::reject::custom(MyError(err)));
+    }
 
     let author = Author {
         id: Default::default(),
         name: data.name.clone(),
         surname: data.surname.clone(),
+        photo: data.photo.clone(),
         created_at: Default::default(),
         updated_at: Default::default(),
     };
-
 
     let response = warp::reply::json(&SingeAuthorResponse {
         status: "Success".to_string(),
@@ -139,48 +172,89 @@ pub async fn post_author(db: &SqlitePool, data:CreateAuthorRequest)-> Result<imp
         response,
         warp::http::StatusCode::CREATED,
     ))
-
-
 }
 
-//UPDATE AUTHOR
-pub async fn update_author(db: &SqlitePool, data:UpdateAuthorRequest, author_id: i64)-> Result<impl Reply, Rejection>{
-   
+//UPDATE AUTHOR    // Check image format if photo is provided
+    // if let Some(photo_data) = &photo {
+    //     if !check_image_format(photo_data) {
+    //         return Ok(warp::reply::with_status(
+    //             warp::reply::json(&ErrorResponse::new("Bad Request".to_string())),
+    //             warp::http::StatusCode::BAD_REQUEST,
+    //         ));
+    //     }
 
-    
+    //     // Check image size if photo is provided
+    //     if let Some(photo_data) = &photo {
+    //         if !check_image_size(photo_data) {
+    //         return Ok(warp::reply::with_status(
+    //             warp::reply::json(&ErrorResponse::new(
+    //                 "Bad Request".to_string()
+                    
+    //             )),
+    //             warp::http::StatusCode::BAD_REQUEST,
+    //         ));
+    //     }
+    //     }
+        
+    // }
+
+//UPDATE AUTHOR
+pub async fn update_author(
+    db: &SqlitePool,
+    data: UpdateAuthorRequest,
+    author_id: i64,
+) -> Result<impl Reply, Rejection> {
+
+    let photo = data.photo.clone();
+
+    if let Some(photo_data) = &photo {
+        if check_image_format(photo_data).is_none() {
+            return Ok(warp::reply::with_status(
+                warp::reply::json(&ErrorResponse::new("Bad Request".to_string())),
+                warp::http::StatusCode::BAD_REQUEST,
+            ));
+        }
+
+        if check_image_size(photo_data).is_none() {
+            return Ok(warp::reply::with_status(
+                warp::reply::json(&ErrorResponse::new("Bad Request".to_string())),
+                warp::http::StatusCode::BAD_REQUEST,
+            ));
+        }
+    }
+
     let query = "
     UPDATE authors
     SET name = ?,
     surname = ?,
+    photo = ?,
     updated_at = ?
     WHERE id = ?
     ";
 
     let updated_at = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-    
     let name = data.name.clone();
     let surname = data.surname.clone();
+    let photo_to_bind = photo.as_ref().map(|v| v.as_slice()).unwrap_or_default();
 
 
-
-
-    _ =sqlx::query(query)
+    _ = sqlx::query(query)
         .bind(&name)
         .bind(&surname)
+        .bind(photo_to_bind) // Use default if photo is None
         .bind(&updated_at)
         .bind(author_id)
         .execute(db)
         .await;
 
-
     let author = Author {
         id: Default::default(),
         name: name,
         surname: surname,
+        photo: photo,
         created_at: Default::default(),
         updated_at: updated_at,
     };
-
 
     let response = warp::reply::json(&SingeAuthorResponse {
         status: "Success".to_string(),
@@ -189,10 +263,8 @@ pub async fn update_author(db: &SqlitePool, data:UpdateAuthorRequest, author_id:
 
     Ok(warp::reply::with_status(
         response,
-        warp::http::StatusCode::CREATED,
+        warp::http::StatusCode::ACCEPTED,
     ))
-
-
 }
 
 

@@ -125,6 +125,7 @@ pub async fn create_post(db: &SqlitePool, data:CreatePostRequest)-> Result<impl 
         title: data.title.clone(),
         content: data.content.clone(),
         author_id: data.author_id.clone(),
+        uploaded_file: data.uploaded_file.clone(),
         created_at: Default::default(),
         updated_at: Default::default(),
     };
@@ -210,6 +211,7 @@ pub async fn update_post(db: &SqlitePool, data:UpdatePostRequest, post_id: i64)-
         title: title,
         content: content,
         author_id: Default::default(),
+        uploaded_file: Default::default(),
         created_at: Default::default(),
         updated_at: updated_at,
     };
