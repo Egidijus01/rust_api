@@ -59,7 +59,7 @@ pub fn post_author_route(
                 Err(rejection) => Err(rejection),
             }
         })
-    }
+}
 
 
     //ROUTE TO UPDATE AN AUTHOR
@@ -95,3 +95,12 @@ pub fn delete_author_route(db: SqlitePool) -> impl Filter<Extract = impl warp::R
             }
         })
 }
+
+// pub fn upload_route() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+
+
+//     warp::path("upload")
+//         .and(warp::post())
+//         .and(warp::multipart::form().max_length(5_000_000))
+//         .and_then(upload)
+// }

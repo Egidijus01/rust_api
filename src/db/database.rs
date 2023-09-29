@@ -19,7 +19,8 @@ pub fn routes(db: &SqlitePool) -> impl Filter<Extract = impl warp::Reply, Error 
     let delete_author_filter = delete_author_route(db.clone());
     let register_user_filter = register_user_route(db.clone());
     let login_user_filter = login_user_route(db.clone());
-   
+    let dowload_file_filter = download_file(db.clone());
+    // let upload = upload_route();
    
    
    
@@ -36,4 +37,6 @@ pub fn routes(db: &SqlitePool) -> impl Filter<Extract = impl warp::Reply, Error 
     .or(delete_post_filter)
     .or(register_user_filter)
     .or(login_user_filter)
+    .or(dowload_file_filter)
+
 }

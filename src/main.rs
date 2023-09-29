@@ -71,13 +71,12 @@ async fn main() {
         .allow_credentials(true);
 
       
-        // let routes = log_content_type()
-        // .and(database::routes(&db).with(cors)).boxed();
+        
   
         let routes = check_content_type()
         .and(database::routes(&db).with(cors))
         .boxed();
-   
+        // let routes = database::routes(&db).with(cors);
 
 
     warp::serve(routes)

@@ -43,7 +43,7 @@ pub struct PostResponse {
 pub struct CreateAuthorRequest {
     pub name: String,
     pub surname: String,
-    pub photo: Option<Vec<u8>>,
+    pub photo: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -51,7 +51,7 @@ pub struct CreatePostRequest {
     pub title: String,
     pub content: String,
     pub author_id: i64,
-    pub uploaded_file: Option<Vec<u8>>
+    pub uploaded_file: Option<String>
 }
 
 #[derive(Deserialize, Debug)]
@@ -64,7 +64,8 @@ pub struct UserRequest {
 pub struct UpdateAuthorRequest{
     pub name: String,
     pub surname: String,
-    pub photo: Option<Vec<u8>,>
+    pub photo: Option<String>,
+
 
 }
 #[derive(Deserialize, Debug)]
@@ -72,6 +73,8 @@ pub struct UpdateAuthorRequest{
 pub struct UpdatePostRequest{
     pub title: String,
     pub content: String,
+    pub uploaded_file: Option<String>,
+
 
 
 
@@ -97,4 +100,10 @@ pub struct PageQueryParam {
 #[derive(Debug, Deserialize)]
 pub struct SearchQueryParam{
     pub search: Option<String>
+}
+
+#[derive (Debug, Serialize)]
+pub struct FileResponse{
+    pub status: String,
+    pub data: String,
 }

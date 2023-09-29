@@ -112,4 +112,34 @@ pub fn delete_post_route(db: SqlitePool) -> impl Filter<Extract = impl warp::Rep
         })
 }
 
+pub fn download_file_route(
+    db: SqlitePool,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    warp::path!("api" / "posts" / i64)
+        .and(warp::get())
+        .and(with_auth()) // Add authentication here
+        .and(warp::any().map(move || db.clone())) // Inject the database pool
+        .and_then(|id: i64, _ : String, db: SqlitePool| {
+            let db_clone = db.clone();
+            async move {
+                posts_handler::get_post(&db_clone, id).await // Call the get_post handler
+            }
+        })
+}
 
+
+// ROUTE TO DOWNLOAD FILE
+pub fn download_file(
+    db: SqlitePool,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    warp::path!("api" / "posts" / i64 / "download")
+        .and(warp::get())
+        .and(with_auth()) // Add authentication here
+        .and(warp::any().map(move || db.clone())) // Inject the database pool
+        .and_then(|id: i64, _ : String, db: SqlitePool| {
+            let db_clone = db.clone();
+            async move {
+                posts_handler::download_file_by_id(&db_clone, id).await // Call the get_post handler
+            }
+        })
+}

@@ -1,11 +1,24 @@
+use std::fs::{File, self};
+use std::{io};
+
+
+use base64::decode;
+use futures_util::StreamExt;
+
 use crate::models::authors::Author;
 use crate::models::response::{SingeAuthorResponse, AuthorResponse, CreateAuthorRequest, UpdateAuthorRequest, StatusResponse, PageQueryParam};
 use sqlx::SqlitePool;
-use warp::reject::Reject;
+use uuid::Uuid;
+use warp::reject::{Reject, reject, self};
 use crate::Middleware::mime_check::{check_image_format, check_image_size};
 use warp::{ Rejection, Reply};
 use serde:: Serialize;
+use bytes::{BufMut, Buf};
+use futures::TryStreamExt;
 
+
+// use worker::{FormData, FormEntry};
+use warp::multipart::{FormData, Part};
 
 #[derive(Debug, Serialize)]
 pub struct ErrorResponse {
@@ -20,6 +33,18 @@ impl ErrorResponse {
 
 impl warp::reject::Reject for ErrorResponse {}
 
+#[derive(Debug)]
+pub enum FileError {
+    Io(io::Error),
+}
+
+impl warp::reject::Reject for FileError {}
+
+impl From<io::Error> for FileError {
+    fn from(error: io::Error) -> Self {
+        FileError::Io(error)
+    }
+}
 
 #[derive(Debug)]
 struct MyError(sqlx::Error);
@@ -110,34 +135,38 @@ pub async fn get_author(db: &SqlitePool, id: i64) -> Result<impl Reply, Rejectio
 }
 
 
+
+
 //CREATE AN AUTHOR
 pub async fn post_author(
     db: &SqlitePool,
     data: CreateAuthorRequest,
 ) -> Result<impl Reply, Rejection> {
-    let photo = data.photo.clone();
-
-
-
-
-
-    if let Some(photo_data) = &photo {
-        if check_image_format(photo_data).is_none() {
-            return Ok(warp::reply::with_status(
-                warp::reply::json(&ErrorResponse::new("Bad Request".to_string())),
-                warp::http::StatusCode::BAD_REQUEST,
-            ));
+    // Decode the base64-encoded photo data
+    let photo_data = match &data.photo {
+        Some(photo) => {
+            let decoded = decode(photo);
+            match decoded {
+                Ok(decoded) => Some(decoded),
+                Err(_) => {
+                    return Ok(warp::reply::with_status(
+                        warp::reply::json(&ErrorResponse::new("Bad Request".to_string())),
+                        warp::http::StatusCode::BAD_REQUEST,
+                    ));
+                }
+            }
         }
+        None => None,
+    };
     
-        if check_image_size(photo_data).is_none() {
+    if let Some(photo_data) = &photo_data {
+        if check_image_format(photo_data).is_none() || check_image_size(photo_data).is_none() {
             return Ok(warp::reply::with_status(
                 warp::reply::json(&ErrorResponse::new("Bad Request".to_string())),
                 warp::http::StatusCode::BAD_REQUEST,
             ));
         }
     }
-
-
     let query = "
         INSERT INTO authors (name, surname, photo)
         VALUES (?, ?, ?)
@@ -147,7 +176,7 @@ pub async fn post_author(
     if let Err(err) = sqlx::query(query)
         .bind(&data.name)
         .bind(&data.surname)
-        .bind(&data.photo)
+        .bind(photo_data.as_ref().map(|s| String::from_utf8_lossy(s).to_string())) // Convert Vec<u8> to String
         .execute(db)
         .await
     {
@@ -158,7 +187,7 @@ pub async fn post_author(
         id: Default::default(),
         name: data.name.clone(),
         surname: data.surname.clone(),
-        photo: data.photo.clone(),
+        photo: photo_data.clone(),
         created_at: Default::default(),
         updated_at: Default::default(),
     };
@@ -172,31 +201,7 @@ pub async fn post_author(
         response,
         warp::http::StatusCode::CREATED,
     ))
-}
-
-//UPDATE AUTHOR    // Check image format if photo is provided
-    // if let Some(photo_data) = &photo {
-    //     if !check_image_format(photo_data) {
-    //         return Ok(warp::reply::with_status(
-    //             warp::reply::json(&ErrorResponse::new("Bad Request".to_string())),
-    //             warp::http::StatusCode::BAD_REQUEST,
-    //         ));
-    //     }
-
-    //     // Check image size if photo is provided
-    //     if let Some(photo_data) = &photo {
-    //         if !check_image_size(photo_data) {
-    //         return Ok(warp::reply::with_status(
-    //             warp::reply::json(&ErrorResponse::new(
-    //                 "Bad Request".to_string()
-                    
-    //             )),
-    //             warp::http::StatusCode::BAD_REQUEST,
-    //         ));
-    //     }
-    //     }
-        
-    // }
+} 
 
 //UPDATE AUTHOR
 pub async fn update_author(
@@ -205,23 +210,31 @@ pub async fn update_author(
     author_id: i64,
 ) -> Result<impl Reply, Rejection> {
 
-    let photo = data.photo.clone();
-
-    if let Some(photo_data) = &photo {
-        if check_image_format(photo_data).is_none() {
-            return Ok(warp::reply::with_status(
-                warp::reply::json(&ErrorResponse::new("Bad Request".to_string())),
-                warp::http::StatusCode::BAD_REQUEST,
-            ));
+    let photo_data = match &data.photo {
+        Some(photo) => {
+            let decoded = decode(photo);
+            match decoded {
+                Ok(decoded) => Some(decoded),
+                Err(_) => {
+                    return Ok(warp::reply::with_status(
+                        warp::reply::json(&ErrorResponse::new("Bad Request".to_string())),
+                        warp::http::StatusCode::BAD_REQUEST,
+                    ));
+                }
+            }
         }
-
-        if check_image_size(photo_data).is_none() {
+        None => None,
+    };
+    
+    if let Some(photo_data) = &photo_data {
+        if check_image_format(photo_data).is_none() || check_image_size(photo_data).is_none() {
             return Ok(warp::reply::with_status(
                 warp::reply::json(&ErrorResponse::new("Bad Request".to_string())),
                 warp::http::StatusCode::BAD_REQUEST,
             ));
         }
     }
+
 
     let query = "
     UPDATE authors
@@ -233,15 +246,12 @@ pub async fn update_author(
     ";
 
     let updated_at = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-    let name = data.name.clone();
-    let surname = data.surname.clone();
-    let photo_to_bind = photo.as_ref().map(|v| v.as_slice()).unwrap_or_default();
-
+    
 
     _ = sqlx::query(query)
-        .bind(&name)
-        .bind(&surname)
-        .bind(photo_to_bind) // Use default if photo is None
+        .bind(&data.name)
+        .bind(&data.surname)
+        .bind(&photo_data) // Use default if photo is None
         .bind(&updated_at)
         .bind(author_id)
         .execute(db)
@@ -249,9 +259,9 @@ pub async fn update_author(
 
     let author = Author {
         id: Default::default(),
-        name: name,
-        surname: surname,
-        photo: photo,
+        name: data.name.clone(),
+        surname: data.surname.clone(),
+        photo: photo_data.clone(),
         created_at: Default::default(),
         updated_at: updated_at,
     };
@@ -292,3 +302,96 @@ pub async fn delete_author(db: &SqlitePool, id: i64)-> Result<impl Reply, Reject
     ))
 }
 
+
+
+
+
+// GET FILE WITH FORMDATA
+// pub async fn uploadas(form: FormData) -> Result<impl Reply, Rejection> {
+//     let parts: Vec<Part> = form.try_collect().await.map_err(|e| {
+//         eprintln!("form error: {}", e);
+//         warp::reject::reject()
+//     })?;
+
+//     for p in parts {
+//         if p.name() == "file" {
+//             let content_type = p.content_type();
+//             let file_ending;
+//             match content_type {
+//                 Some(file_type) => match file_type {
+//                     "application/pdf" => {
+//                         file_ending = "pdf";
+//                     }
+//                     "image/png" => {
+//                         file_ending = "png";
+//                     }
+//                     v => {
+//                         eprintln!("invalid file type found: {}", v);
+//                         return Err(warp::reject::reject());
+//                     }
+//                 },
+//                 None => {
+//                     eprintln!("file type could not be determined");
+//                     return Err(warp::reject::reject());
+//                 }
+//             }
+
+//             let value = p
+//                 .stream()
+//                 .try_fold(Vec::new(), |mut vec, data| {
+//                     vec.put(data);
+//                     async move { Ok(vec) }
+//                 })
+//                 .await
+//                 .map_err(|e| {
+//                     eprintln!("reading file error: {}", e);
+//                     warp::reject::reject()
+//                 })?;
+
+//             let file_name = format!("./files/{}.{}", Uuid::new_v4().to_string(), file_ending);
+//             tokio::fs::write(&file_name, value).await.map_err(|e| {
+//                 eprint!("error writing file: {}", e);
+//                 warp::reject::reject()
+//             })?;
+//             println!("created file: {}", file_name);
+//         }
+//     }
+
+//     Ok("success")
+// }
+
+// use tokio::task;
+// pub async fn upload(form: warp::multipart::FormData) -> Result<impl Reply, Rejection> {
+//     task::spawn(async move {
+//         let mut parts = form.into_stream();
+//         println!("{:?}", parts);
+
+//         while let Ok(p) = parts.next().await.unwrap() {
+            
+
+
+//             let filename = p.filename().unwrap_or("photo.png");
+//             let filepath = format!("uploads/{}", filename);
+//             println!("{}", filename.to_string());
+//             println!("{}", filepath.to_string());
+
+
+//             fs::create_dir_all("uploads").unwrap();
+
+//             save_part_to_file(&filepath, p).await.expect("save error");
+//         }
+//     });
+
+//     Ok("Upload successful!")
+// }
+
+// async fn save_part_to_file(path: &str, part: warp::multipart::Part) -> Result<(), std::io::Error> {
+//     let data = part
+//         .stream()
+//         .try_fold(Vec::new(), |mut acc, buf| async move {
+//             acc.extend_from_slice(buf.chunk());
+//             Ok(acc)
+//         })
+//         .await.expect("folding error");
+//     std::fs::write(path, data)
+// }

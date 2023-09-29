@@ -28,7 +28,7 @@ struct Claims {
 
 pub fn create_jwt(username: &String) -> Result<String, MyError> {
     let expiration = Utc::now()
-        .checked_add_signed(chrono::Duration::minutes(5))  // 5 MINUTE LIFESPAN
+        .checked_add_signed(chrono::Duration::minutes(20))  // 5 MINUTE LIFESPAN
         .expect("valid timestamp")
         .timestamp();
 

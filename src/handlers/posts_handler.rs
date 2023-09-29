@@ -1,10 +1,14 @@
-use crate::models::posts::Post;
-use crate::models::response::{SingePostResponse, PostResponse, CreatePostRequest, UpdatePostRequest, StatusResponse, PageQueryParam};
-use sqlx::SqlitePool;
+use std::fs::File;
+use std::io::Write;
 
+use crate::Middleware::mime_check::{check_content_type, check_file_size};
+use crate::models::posts::Post;
+use crate::models::response::{SingePostResponse, PostResponse, CreatePostRequest, UpdatePostRequest, StatusResponse, PageQueryParam, FileResponse};
+use sqlx::{SqlitePool, Row};
+use base64::{decode, encode};
 use warp::{ Rejection, Reply};
 use serde:: Serialize;
-
+use rand::Rng;
 #[derive(Debug, Serialize)]
 pub struct ErrorResponse {
     pub message: String,
@@ -28,12 +32,7 @@ pub async fn get_all_posts(params: PageQueryParam, search_param: Option<String>,
 
     let mut query = "
         SELECT
-            id,
-            title,
-            content,
-            author_id,
-            created_at as created_at,
-            updated_at as updated_at
+            *
         FROM posts
         
         ".to_owned();
@@ -71,7 +70,7 @@ pub async fn get_all_posts(params: PageQueryParam, search_param: Option<String>,
 pub async fn get_post(db: &SqlitePool, id: i64) -> Result<impl Reply, Rejection>{
 
     let query = "
-        SELECT id, title, content, author_id, created_at, updated_at
+        SELECT id, title, content, author_id, uploaded_file, created_at, updated_at
         FROM posts 
         WHERE id = ?
     ";
@@ -102,14 +101,42 @@ pub async fn get_post(db: &SqlitePool, id: i64) -> Result<impl Reply, Rejection>
 
 
 
+
+
+
+
 //CREATE A POST
 pub async fn create_post(db: &SqlitePool, data:CreatePostRequest)-> Result<impl Reply, Rejection>{
-   
+    let file_data = match &data.uploaded_file {
+        Some(post) => {
+            let decoded = decode(post);
+            match decoded {
+                Ok(decoded) => Some(decoded),
+                Err(_) => {
+                    return Ok(warp::reply::with_status(
+                        warp::reply::json(&ErrorResponse::new("Bad Request".to_string())),
+                        warp::http::StatusCode::BAD_REQUEST,
+                    ));
+                }
+            }
+        }
+        None => None,
+    };
+
+    if let Some(file_data) = &file_data {
+        if check_file_size(file_data).is_none() || check_file_size(file_data).is_none() {
+            return Ok(warp::reply::with_status(
+                warp::reply::json(&ErrorResponse::new("Bad Request".to_string())),
+                warp::http::StatusCode::BAD_REQUEST,
+            ));
+        }
+    }
+
 
     
     let query = "
-        INSERT INTO posts (title, content, author_id)
-        VALUES (?, ?, ?)
+        INSERT INTO posts (title, content, author_id, uploaded_file)
+        VALUES (?, ?, ?, ?)
     ";
 
 
@@ -117,6 +144,7 @@ pub async fn create_post(db: &SqlitePool, data:CreatePostRequest)-> Result<impl 
         .bind(&data.title)
         .bind(&data.content)
         .bind(&data.author_id)
+        .bind(&file_data)
         .execute(db)
         .await;
 
@@ -125,7 +153,7 @@ pub async fn create_post(db: &SqlitePool, data:CreatePostRequest)-> Result<impl 
         title: data.title.clone(),
         content: data.content.clone(),
         author_id: data.author_id.clone(),
-        uploaded_file: data.uploaded_file.clone(),
+        uploaded_file: file_data.clone(),
         created_at: Default::default(),
         updated_at: Default::default(),
     };
@@ -179,27 +207,52 @@ pub async fn get_posts_by_auth(db: &SqlitePool, author_id: i64) -> Result<impl R
 //UPDATE POST BY ID
 pub async fn update_post(db: &SqlitePool, data:UpdatePostRequest, post_id: i64)-> Result<impl Reply, Rejection>{
    
+    let file_data = match &data.uploaded_file {
+        Some(post) => {
+            let decoded = decode(post);
+            match decoded {
+                Ok(decoded) => Some(decoded),
+                Err(_) => {
+                    return Ok(warp::reply::with_status(
+                        warp::reply::json(&ErrorResponse::new("Bad Request".to_string())),
+                        warp::http::StatusCode::BAD_REQUEST,
+                    ));
+                }
+            }
+        }
+        None => None,
+    };
+
+    if let Some(file_data) = &file_data {
+        if check_file_size(file_data).is_none() || check_file_size(file_data).is_none() {
+            return Ok(warp::reply::with_status(
+                warp::reply::json(&ErrorResponse::new("Bad Request".to_string())),
+                warp::http::StatusCode::BAD_REQUEST,
+            ));
+        }
+    }
 
     
     let query = "
     UPDATE posts
     SET title = ?,
     content = ?,
+    uploaded_file = ?
     updated_at = ?
     WHERE id = ?
     ";
 
     let updated_at = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     
-    let title = data.title.clone();
-    let content = data.content.clone();
+   
 
 
 
 
     _ = sqlx::query(query)
-        .bind(&title)
-        .bind(&content)
+        .bind(&data.title)
+        .bind(&data.content)
+        .bind(&file_data)
         .bind(&updated_at)
         .bind(post_id)
         .execute(db)
@@ -208,10 +261,10 @@ pub async fn update_post(db: &SqlitePool, data:UpdatePostRequest, post_id: i64)-
 
     let post = Post {
         id: Default::default(),
-        title: title,
-        content: content,
+        title: data.title.clone(),
+        content: data.content.clone(),
         author_id: Default::default(),
-        uploaded_file: Default::default(),
+        uploaded_file: file_data.clone(),
         created_at: Default::default(),
         updated_at: updated_at,
     };
@@ -255,3 +308,53 @@ pub async fn delete_post(db: &SqlitePool, id: i64)-> Result<impl Reply, Rejectio
         warp::http::StatusCode::CREATED,
     ))
 }
+
+//DOWNLOAD BASE64 FORMAT FILE BY POST ID
+pub async fn download_file_by_id(db: &SqlitePool, id: i64) -> Result<impl Reply, Rejection> {
+    let query = "
+        SELECT uploaded_file
+        FROM posts 
+        WHERE id = ?
+    ";
+
+    match sqlx::query(query)
+        .bind(id)
+        .fetch_optional(db)
+        .await
+    {
+        Ok(Some(row)) => {
+            // Assuming `your_binary_data_column_name` is the correct column name
+            let file_data: Vec<u8> = row.get("uploaded_file");
+
+            // Now you have the binary data
+
+            let file_data_base64 = base64::encode(&file_data);
+
+            // Now you have the binary data encoded as base64
+            // You can use `file_data_base64` in your response
+
+            let response_data = FileResponse {
+                // Other fields of your response
+                status: "success".to_string(),
+                data: file_data_base64,
+            };
+
+            Ok(warp::reply::json(&response_data))
+        }
+        Ok(None) => Err(warp::reject::not_found()),
+        Err(e) => {
+            eprintln!("Error fetching file data: {:?}", e);
+            let error_response = ErrorResponse::new("Error fetching file data".to_string());
+            Err(warp::reject::custom(error_response))
+        }
+    }
+}
+
+
+
+// async fn download_file(form: FormData) -> Result<impl Reply, Rejection> {
+//     let parts: Vec<Part> = form.try_collect().await.map_err(|e| {
+//         eprintln!("form error: {}", e);
+//         warp::reject::reject()
+//     })?;
+// }

@@ -14,3 +14,4 @@ pub struct Post {
     pub created_at: String,
     pub updated_at: String,
 }
+
