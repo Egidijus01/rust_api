@@ -1,16 +1,19 @@
 
+use std::convert::Infallible;
+
 use sqlx::{migrate::MigrateDatabase, Sqlite, SqlitePool};
+use ws::clients::*;
 use warp::{http::Method, Filter};
 mod Middleware;
 mod db;
 mod routes;
 mod models;
 mod handlers;
+mod ws;
 use crate::Middleware::mime_check::check_content_type;
 use crate::db::database;
 
 const DB_URL: &str = "sqlite://sqlite.db";
-
 
 
 async fn apply_migrations(db: &SqlitePool){
@@ -33,8 +36,6 @@ match migration_results {
 
 
 
-
-
 #[tokio::main]
 async fn main() {
     // Initialize your database connection pool
@@ -52,14 +53,18 @@ async fn main() {
         .await
         .expect("Failed to connect to the database");
 
-
-
-
+    let clients: Clients = create_clients();
     
-    // Apply migrations
+  
+    let ws_route = warp::path("ws")
+        .and(warp::ws())
+        .and(with_clients(clients.clone()))
+        .and_then(ws::ws_handler::ws_handler);
+    
+    // // Apply migrations
     apply_migrations(&db).await;
 
-
+    
     
 
     // let routes = all_authors;
@@ -74,14 +79,22 @@ async fn main() {
         
   
         let routes = check_content_type()
-        .and(database::routes(&db).with(cors))
-        .boxed();
+        .and(database::routes(&db, clients).with(cors))
+        .boxed()
+        .or(ws_route.with(warp::cors().allow_any_origin()));
         // let routes = database::routes(&db).with(cors);
 
+        // let routes = ws_route.with(warp::cors().allow_any_origin());
 
+
+
+        println!("tekstas");
     warp::serve(routes)
         .run(([127, 0, 0, 1], 8000)) 
         .await;
 }
 
 
+fn with_clients(clients: Clients) -> impl Filter<Extract = (Clients,), Error = Infallible> + Clone {
+    warp::any().map(move || clients.clone())
+}

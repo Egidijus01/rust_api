@@ -1,20 +1,18 @@
 use std::fs::{File, self};
-use std::{io};
-
-
+use std::io;
+use crate::ws::ws_handler::send_message_to_clients;
+use crate::ws::clients::Clients;
 use base64::decode;
 use futures_util::StreamExt;
 
 use crate::models::authors::Author;
 use crate::models::response::{SingeAuthorResponse, AuthorResponse, CreateAuthorRequest, UpdateAuthorRequest, StatusResponse, PageQueryParam};
 use sqlx::SqlitePool;
-use uuid::Uuid;
-use warp::reject::{Reject, reject, self};
+
+use warp::reject::Reject;
 use crate::Middleware::mime_check::{check_image_format, check_image_size};
 use warp::{ Rejection, Reply};
 use serde:: Serialize;
-use bytes::{BufMut, Buf};
-use futures::TryStreamExt;
 
 
 // use worker::{FormData, FormEntry};
@@ -51,6 +49,9 @@ struct MyError(sqlx::Error);
 
 impl Reject for MyError {}
 
+
+
+
 //GET ALL AUTHORS
 pub async fn get_all_authors(params: PageQueryParam, search_param: Option<String>, db: &SqlitePool) -> Result<impl Reply, Rejection> {
     let page = params.page.unwrap_or(1);
@@ -68,7 +69,6 @@ pub async fn get_all_authors(params: PageQueryParam, search_param: Option<String
             updated_at
         FROM authors
     ".to_owned();
-
 
 
 
@@ -141,6 +141,7 @@ pub async fn get_author(db: &SqlitePool, id: i64) -> Result<impl Reply, Rejectio
 pub async fn post_author(
     db: &SqlitePool,
     data: CreateAuthorRequest,
+    clients:Clients
 ) -> Result<impl Reply, Rejection> {
     // Decode the base64-encoded photo data
     let photo_data = match &data.photo {
@@ -182,7 +183,7 @@ pub async fn post_author(
     {
         return Err(warp::reject::custom(MyError(err)));
     }
-
+    send_message_to_clients("Author has been created".to_string(), &clients).await;
     let author = Author {
         id: Default::default(),
         name: data.name.clone(),
@@ -191,6 +192,8 @@ pub async fn post_author(
         created_at: Default::default(),
         updated_at: Default::default(),
     };
+
+
 
     let response = warp::reply::json(&SingeAuthorResponse {
         status: "Success".to_string(),
@@ -208,6 +211,7 @@ pub async fn update_author(
     db: &SqlitePool,
     data: UpdateAuthorRequest,
     author_id: i64,
+    clients:Clients
 ) -> Result<impl Reply, Rejection> {
 
     let photo_data = match &data.photo {
@@ -265,6 +269,7 @@ pub async fn update_author(
         created_at: Default::default(),
         updated_at: updated_at,
     };
+    send_message_to_clients("Author has been updated".to_string(), &clients).await;
 
     let response = warp::reply::json(&SingeAuthorResponse {
         status: "Success".to_string(),
@@ -279,7 +284,7 @@ pub async fn update_author(
 
 
 //DELTE AUTHOR
-pub async fn delete_author(db: &SqlitePool, id: i64)-> Result<impl Reply, Rejection>{
+pub async fn delete_author(db: &SqlitePool, id: i64, clients:Clients)-> Result<impl Reply, Rejection>{
 
     let query = "
         DELETE FROM authors
@@ -295,103 +300,10 @@ pub async fn delete_author(db: &SqlitePool, id: i64)-> Result<impl Reply, Reject
         status: "Success".to_string(),
 
     });
+    send_message_to_clients("Author has been deleted".to_string(), &clients).await;
 
     Ok(warp::reply::with_status(
         response,
         warp::http::StatusCode::CREATED,
     ))
 }
-
-
-
-
-
-// GET FILE WITH FORMDATA
-// pub async fn uploadas(form: FormData) -> Result<impl Reply, Rejection> {
-//     let parts: Vec<Part> = form.try_collect().await.map_err(|e| {
-//         eprintln!("form error: {}", e);
-//         warp::reject::reject()
-//     })?;
-
-//     for p in parts {
-//         if p.name() == "file" {
-//             let content_type = p.content_type();
-//             let file_ending;
-//             match content_type {
-//                 Some(file_type) => match file_type {
-//                     "application/pdf" => {
-//                         file_ending = "pdf";
-//                     }
-//                     "image/png" => {
-//                         file_ending = "png";
-//                     }
-//                     v => {
-//                         eprintln!("invalid file type found: {}", v);
-//                         return Err(warp::reject::reject());
-//                     }
-//                 },
-//                 None => {
-//                     eprintln!("file type could not be determined");
-//                     return Err(warp::reject::reject());
-//                 }
-//             }
-
-//             let value = p
-//                 .stream()
-//                 .try_fold(Vec::new(), |mut vec, data| {
-//                     vec.put(data);
-//                     async move { Ok(vec) }
-//                 })
-//                 .await
-//                 .map_err(|e| {
-//                     eprintln!("reading file error: {}", e);
-//                     warp::reject::reject()
-//                 })?;
-
-//             let file_name = format!("./files/{}.{}", Uuid::new_v4().to_string(), file_ending);
-//             tokio::fs::write(&file_name, value).await.map_err(|e| {
-//                 eprint!("error writing file: {}", e);
-//                 warp::reject::reject()
-//             })?;
-//             println!("created file: {}", file_name);
-//         }
-//     }
-
-//     Ok("success")
-// }
-
-// use tokio::task;
-// pub async fn upload(form: warp::multipart::FormData) -> Result<impl Reply, Rejection> {
-//     task::spawn(async move {
-//         let mut parts = form.into_stream();
-//         println!("{:?}", parts);
-
-//         while let Ok(p) = parts.next().await.unwrap() {
-            
-
-
-//             let filename = p.filename().unwrap_or("photo.png");
-//             let filepath = format!("uploads/{}", filename);
-//             println!("{}", filename.to_string());
-//             println!("{}", filepath.to_string());
-
-
-//             fs::create_dir_all("uploads").unwrap();
-
-//             save_part_to_file(&filepath, p).await.expect("save error");
-//         }
-//     });
-
-//     Ok("Upload successful!")
-// }
-
-// async fn save_part_to_file(path: &str, part: warp::multipart::Part) -> Result<(), std::io::Error> {
-//     let data = part
-//         .stream()
-//         .try_fold(Vec::new(), |mut acc, buf| async move {
-//             acc.extend_from_slice(buf.chunk());
-//             Ok(acc)
-//         })
-//         .await.expect("folding error");
-//     std::fs::write(path, data)
-// }

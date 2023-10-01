@@ -1,14 +1,14 @@
-use std::fs::File;
-use std::io::Write;
-
+use crate::ws::clients::Clients;
+use crate::ws::ws_handler::send_message_to_clients;
 use crate::Middleware::mime_check::{check_content_type, check_file_size};
 use crate::models::posts::Post;
 use crate::models::response::{SingePostResponse, PostResponse, CreatePostRequest, UpdatePostRequest, StatusResponse, PageQueryParam, FileResponse};
+
 use sqlx::{SqlitePool, Row};
 use base64::{decode, encode};
 use warp::{ Rejection, Reply};
 use serde:: Serialize;
-use rand::Rng;
+
 #[derive(Debug, Serialize)]
 pub struct ErrorResponse {
     pub message: String,
@@ -106,7 +106,7 @@ pub async fn get_post(db: &SqlitePool, id: i64) -> Result<impl Reply, Rejection>
 
 
 //CREATE A POST
-pub async fn create_post(db: &SqlitePool, data:CreatePostRequest)-> Result<impl Reply, Rejection>{
+pub async fn create_post(db: &SqlitePool, data:CreatePostRequest, clients: Clients)-> Result<impl Reply, Rejection>{
     let file_data = match &data.uploaded_file {
         Some(post) => {
             let decoded = decode(post);
@@ -158,6 +158,7 @@ pub async fn create_post(db: &SqlitePool, data:CreatePostRequest)-> Result<impl 
         updated_at: Default::default(),
     };
 
+    send_message_to_clients("Post has been created".to_string(), &clients).await;
 
     let response = warp::reply::json(&SingePostResponse {
         status: "Success".to_string(),
@@ -205,7 +206,7 @@ pub async fn get_posts_by_auth(db: &SqlitePool, author_id: i64) -> Result<impl R
 
 
 //UPDATE POST BY ID
-pub async fn update_post(db: &SqlitePool, data:UpdatePostRequest, post_id: i64)-> Result<impl Reply, Rejection>{
+pub async fn update_post(db: &SqlitePool, data:UpdatePostRequest, post_id: i64, clients: Clients)-> Result<impl Reply, Rejection>{
    
     let file_data = match &data.uploaded_file {
         Some(post) => {
@@ -244,10 +245,6 @@ pub async fn update_post(db: &SqlitePool, data:UpdatePostRequest, post_id: i64)-
 
     let updated_at = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     
-   
-
-
-
 
     _ = sqlx::query(query)
         .bind(&data.title)
@@ -269,6 +266,7 @@ pub async fn update_post(db: &SqlitePool, data:UpdatePostRequest, post_id: i64)-
         updated_at: updated_at,
     };
 
+    send_message_to_clients("Post has been updated".to_string(), &clients).await;
 
     let response = warp::reply::json(&SingePostResponse {
         status: "Success".to_string(),
@@ -286,7 +284,7 @@ pub async fn update_post(db: &SqlitePool, data:UpdatePostRequest, post_id: i64)-
 
 
 //DELTE POST
-pub async fn delete_post(db: &SqlitePool, id: i64)-> Result<impl Reply, Rejection>{
+pub async fn delete_post(db: &SqlitePool, id: i64, clients: Clients)-> Result<impl Reply, Rejection>{
 
     let query = "
         DELETE FROM posts
@@ -302,6 +300,7 @@ pub async fn delete_post(db: &SqlitePool, id: i64)-> Result<impl Reply, Rejectio
         status: "Success".to_string(),
 
     });
+    send_message_to_clients("Post has been deleted".to_string(), &clients).await;
 
     Ok(warp::reply::with_status(
         response,
