@@ -17,14 +17,28 @@ impl Reject for InvalidContentType {}
 pub fn check_content_type() -> impl Filter<Extract = (), Error = warp::Rejection> + Clone {
     warp::header::headers_cloned()
         .and_then(|headers: warp::http::HeaderMap| async move {
+            let mut has_content_type = false;
+            let mut has_accept = false;
             if let Some(content_type) = headers.get("content-type") {
                 if let Ok(content_type) = content_type.to_str() {
-                    if content_type.to_lowercase() == "application/json"
-
-                    {
-                        return Ok(());
+                    if content_type.to_lowercase() == "application/json" {
+                        has_content_type = true;
                     }
                 }
+            }
+
+            // Check "Accept" header
+            if let Some(accept) = headers.get("accept") {
+                if let Ok(accept) = accept.to_str() {
+                    if accept.to_lowercase() == "application/json" {
+                        has_accept = true;
+                    }
+                }
+            }
+
+            // Return success if either "Content-Type" or "Accept" is valid
+            if has_content_type || has_accept {
+                return Ok(());
             }
 
             println!("Invalid or missing Content-Type header");

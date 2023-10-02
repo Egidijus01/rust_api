@@ -10,6 +10,8 @@ use crate::Middleware::auth::*;
 use warp::{ Rejection, Reply};
 use warp::http::StatusCode;
 use warp::reply;
+
+
 use warp::reject::Reject;
 #[derive(Debug)]
 struct WrongCredentialsError;
@@ -20,6 +22,17 @@ impl Reject for WrongCredentialsError {}
 pub struct UserPassword {
     pub password: String,
 }
+
+
+#[utoipa::path(
+    post,
+    request_body = UserRequest,
+    path = "/api/register",
+    responses(
+        (status = 200, description = "Registration successfull"),
+        (status = NOT_FOUND, description = "Basic auth required")
+    ),
+)]
 pub async fn register_user_handler(db: &SqlitePool, data:UserRequest) -> Result<impl Reply, Rejection> {
     let mut hasher = Sha256::new();
     
@@ -74,7 +87,18 @@ async fn get_users_hash(db: &SqlitePool, username:String) -> Result<String, sqlx
 
 
 
-
+#[utoipa::path(
+    post,
+    request_body = UserRequest,
+    path = "/api/login",
+    responses(
+        (status = 200, description = "Login using credentials. Returns bearer token.", body = LoginResponse),
+        (status = NOT_FOUND, description = "Basic auth required")
+    ),
+    security(
+        ("basic_auth" = [])
+    )
+)]
 pub async fn login_user_handler(db: &SqlitePool, data:UserRequest) -> Result<impl Reply, Rejection> {
     let username = data.username;
     let form_password = data.password;

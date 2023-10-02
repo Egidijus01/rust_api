@@ -1,10 +1,7 @@
-use std::fs::{File, self};
 use std::io;
 use crate::ws::ws_handler::send_message_to_clients;
 use crate::ws::clients::Clients;
 use base64::decode;
-use futures_util::StreamExt;
-
 use crate::models::authors::Author;
 use crate::models::response::{SingeAuthorResponse, AuthorResponse, CreateAuthorRequest, UpdateAuthorRequest, StatusResponse, PageQueryParam};
 use sqlx::SqlitePool;
@@ -15,8 +12,6 @@ use warp::{ Rejection, Reply};
 use serde:: Serialize;
 
 
-// use worker::{FormData, FormEntry};
-use warp::multipart::{FormData, Part};
 
 #[derive(Debug, Serialize)]
 pub struct ErrorResponse {
@@ -50,9 +45,16 @@ struct MyError(sqlx::Error);
 impl Reject for MyError {}
 
 
-
-
 //GET ALL AUTHORS
+#[utoipa::path(
+    get,
+    path = "/api/authors",
+    responses(
+        (status = 200, description = "Authors found succescully", body = AuthorResponse),
+        (status = NOT_FOUND, description = "Authors was not found")
+    ),
+    
+)]
 pub async fn get_all_authors(params: PageQueryParam, search_param: Option<String>, db: &SqlitePool) -> Result<impl Reply, Rejection> {
     let page = params.page.unwrap_or(1);
     let items_per_page = 10;
@@ -103,6 +105,17 @@ pub async fn get_all_authors(params: PageQueryParam, search_param: Option<String
 }
 
 //GET SINGLE AUTHOR
+#[utoipa::path(
+    get,
+    path = "/api/authors/{id}",
+    responses(
+        (status = 200, description = "Author found succescully", body = SingeAuthorResponse),
+        (status = NOT_FOUND, description = "Author was not found")
+    ),
+    params(
+        ("id" = u64, Path, description = "Author database id to get post for"),
+    )
+)]
 pub async fn get_author(db: &SqlitePool, id: i64) -> Result<impl Reply, Rejection>{
 
     let query = "
@@ -138,6 +151,19 @@ pub async fn get_author(db: &SqlitePool, id: i64) -> Result<impl Reply, Rejectio
 
 
 //CREATE AN AUTHOR
+#[utoipa::path(
+    post,
+    request_body = CreateAuthorRequest,
+    path = "/api/posts",
+    responses(
+        (status = 201, description = "Author created successfully", body = SingeAuthorResponse),
+        (status = 400, description = "Bad Request"),
+    ),
+    // security(
+    //     ("bearer_auth" = [])
+    // )
+    
+)]
 pub async fn post_author(
     db: &SqlitePool,
     data: CreateAuthorRequest,
@@ -207,6 +233,18 @@ pub async fn post_author(
 } 
 
 //UPDATE AUTHOR
+#[utoipa::path(
+    patch,
+    request_body = UpdateAuthorRequest,
+    path = "/api/authors/{id}",
+    responses(
+        (status = 201, description = "Author updated successfully", body = SingeAuthorResponse),
+        (status = 400, description = "Bad Request"),
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn update_author(
     db: &SqlitePool,
     data: UpdateAuthorRequest,
@@ -284,6 +322,20 @@ pub async fn update_author(
 
 
 //DELTE AUTHOR
+#[utoipa::path(
+    delete,
+    path = "/api/authors/{id}",
+    responses(
+        (status = 200, description = "Author deleted succescully"),
+        (status = NOT_FOUND, description = "Author was not found")
+    ),
+    params(
+        ("id" = u64, Path, description = "Post id"),
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn delete_author(db: &SqlitePool, id: i64, clients:Clients)-> Result<impl Reply, Rejection>{
 
     let query = "

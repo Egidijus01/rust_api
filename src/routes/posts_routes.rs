@@ -7,7 +7,16 @@ use crate::models::response::{ CreatePostRequest, UpdatePostRequest, PageQueryPa
 
 
 //ROUTE FOR ALL POSTS
+#[utoipa::path(
+    get,
+    path = "/api/posts",
+    responses(
+        (status = 200, description = "Posts found succescully", body = PostResponse),
+        (status = NOT_FOUND, description = "Posts was not found")
+    )
+)]
 pub fn get_posts(db: SqlitePool) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone{
+
     warp::path!("api" / "posts")
         .and(warp::get())
         .and(warp::query::<PageQueryParam>())
@@ -137,7 +146,7 @@ pub fn download_file(
         .and_then(|id: i64, _ : String, db: SqlitePool| {
             let db_clone = db.clone();
             async move {
-                posts_handler::download_file_by_id(&db_clone, id).await // Call the get_post handler
+                posts_handler::download_files_by_id(&db_clone, id).await // Call the get_post handler
             }
         })
 }
